@@ -60,10 +60,14 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 18px;
   padding: 18px 16px;
   scrollbar-width: thin;
   scrollbar-color: var(--color-scrollbar) transparent;
+
+  @media (min-width: 1024px) {
+    padding: 18px 65px 18px 110px;
+  }
 }
 
 /* Typing indicator */
@@ -85,12 +89,25 @@
   animation: bounce 1.2s infinite;
 }
 
-.typingIndicator span:nth-child(2) { animation-delay: 0.2s; }
-.typingIndicator span:nth-child(3) { animation-delay: 0.4s; }
+.typingIndicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typingIndicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
 
 @keyframes bounce {
-  0%, 80%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-6px); }
+
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+
+  40% {
+    transform: translateY(-6px);
+  }
 }
 
 /* Error bar */
