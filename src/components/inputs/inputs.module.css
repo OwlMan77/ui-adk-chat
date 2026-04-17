@@ -1,0 +1,60 @@
+.voicePanel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-bg-primary);
+  border-top: 1px solid var(--color-bg-secondary);
+  padding: 10px 14px;
+}
+
+.iconBtn {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.iconBtn:hover {
+  background: var(--color-border);
+}
+
+.record {
+  color: #f87171;
+}
+
+.stop {
+  color: #fbbf24;
+}
+
+.send {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.send:hover {
+  background: var(--color-accent-hover);
+}
+
+.voiceActions {
+  display: flex;
+  gap: 8px;
+}
+
+.closeBtn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--color-typing-dot);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.closeBtn:hover {
+  color: var(--color-text-primary);
+}

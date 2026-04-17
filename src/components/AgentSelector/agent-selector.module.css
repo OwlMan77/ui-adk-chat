@@ -1,0 +1,315 @@
+.screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--color-bg-primary);
+  padding: clamp(16px, 4vw, 48px);
+}
+
+.card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: clamp(28px, 4vh, 56px) clamp(24px, 4vw, 56px);
+  width: min(90vw, 560px);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.logoRow {
+  margin-bottom: 16px;
+}
+
+.logo {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+.subtitle {
+  margin: 0 0 28px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.loadingText {
+  color: var(--color-typing-dot);
+  font-size: 14px;
+  margin: 0;
+}
+
+.errorText {
+  color: var(--color-error-text);
+  font-size: 14px;
+  text-align: center;
+  margin: 0;
+}
+
+.selectWrapper {
+  position: relative;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.select {
+  width: 100%;
+  appearance: none;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  padding: 11px 40px 11px 14px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.select:hover {
+  border-color: var(--color-text-placeholder);
+}
+
+.select:focus {
+  border-color: var(--color-accent);
+}
+
+.select option {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.selectChevron {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: var(--color-text-placeholder);
+  pointer-events: none;
+  line-height: 1;
+}
+
+/* Starter message section */
+.starterSection {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.25s ease,
+    margin-top 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.starterVisible {
+  max-height: 600px;
+  opacity: 1;
+  margin-top: 20px;
+}
+
+.starterActions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.backBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.backBtn:hover {
+  border-color: var(--color-text-placeholder);
+  color: var(--color-text-primary);
+}
+
+.starterLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--color-typing-dot);
+}
+
+.sectionToggle {
+  width: 100%;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.sectionToggle:hover {
+  border-color: var(--color-text-placeholder);
+  color: var(--color-text-primary);
+}
+
+.chevron {
+  font-size: 18px;
+  color: var(--color-text-placeholder);
+  transition: transform 0.2s ease;
+  display: inline-block;
+  line-height: 1;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.sectionContent {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
+  opacity: 0;
+}
+
+.sectionContentOpen {
+  max-height: 300px;
+  opacity: 1;
+}
+
+.starterTextarea {
+  width: 100%;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  padding: 10px 13px;
+  resize: none;
+  outline: none;
+  line-height: 1.5;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.starterTextarea:focus {
+  border-color: var(--color-accent);
+}
+
+.starterTextarea::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.startBtn {
+  align-self: flex-end;
+  background: var(--color-accent);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.startBtn:hover {
+  background: var(--color-accent-hover);
+}
+
+/* Session storage entries */
+.sessionRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sessionRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.sessionInput {
+  flex: 1;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 7px 10px;
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.15s;
+}
+
+.sessionInput:focus {
+  border-color: var(--color-accent);
+}
+
+.sessionInput::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.sessionRemoveBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-typing-dot);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.sessionRemoveBtn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.sessionAddBtn {
+  background: none;
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  color: var(--color-typing-dot);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.sessionAddBtn:hover {
+  border-color: var(--color-text-placeholder);
+  color: var(--color-text-muted);
+}

@@ -1,0 +1,78 @@
+/* ============================================================
+   Theme palettes — applied via [data-theme] on <html>
+   The default (dark) is also set on :root so variables are
+   always defined even before JS hydrates the attribute.
+   ============================================================ */
+
+:root,
+[data-theme="dark"] {
+  --color-bg-primary:        #0f172a;
+  --color-bg-secondary:      #1e293b;
+  --color-border:            #334155;
+  --color-text-primary:      #e2e8f0;
+  --color-text-muted:        #94a3b8;
+  --color-text-placeholder:  #475569;
+  --color-accent:            #2563eb;
+  --color-accent-hover:      #1d4ed8;
+  --color-accent-active:     #1e40af;
+  --color-status-online:     #34d399;
+  --color-error-bg:          #7f1d1d;
+  --color-error-text:        #fca5a5;
+  --color-link:              #93c5fd;
+  --color-typing-dot:        #64748b;
+  --color-scrollbar:         #334155;
+}
+
+[data-theme="light"] {
+  --color-bg-primary:        #f8fafc;
+  --color-bg-secondary:      #ffffff;
+  --color-border:            #cbd5e1;
+  --color-text-primary:      #0f172a;
+  --color-text-muted:        #64748b;
+  --color-text-placeholder:  #94a3b8;
+  --color-accent:            #2563eb;
+  --color-accent-hover:      #1d4ed8;
+  --color-accent-active:     #1e40af;
+  --color-status-online:     #059669;
+  --color-error-bg:          #fee2e2;
+  --color-error-text:        #991b1b;
+  --color-link:              #2563eb;
+  --color-typing-dot:        #94a3b8;
+  --color-scrollbar:         #cbd5e1;
+}
+
+[data-theme="ocean"] {
+  --color-bg-primary:        #0a1628;
+  --color-bg-secondary:      #0d2137;
+  --color-border:            #1a3a52;
+  --color-text-primary:      #cce8f4;
+  --color-text-muted:        #6da8c8;
+  --color-text-placeholder:  #3a6680;
+  --color-accent:            #0891b2;
+  --color-accent-hover:      #0e7490;
+  --color-accent-active:     #155e75;
+  --color-status-online:     #2dd4bf;
+  --color-error-bg:          #7c1d2e;
+  --color-error-text:        #fda4af;
+  --color-link:              #67e8f9;
+  --color-typing-dot:        #2a5f7a;
+  --color-scrollbar:         #1a3a52;
+}
+
+[data-theme="sunset"] {
+  --color-bg-primary:        #1a0e1f;
+  --color-bg-secondary:      #2d1a2e;
+  --color-border:            #4a2d4e;
+  --color-text-primary:      #f3e8f7;
+  --color-text-muted:        #b48cc0;
+  --color-text-placeholder:  #6b4575;
+  --color-accent:            #c026d3;
+  --color-accent-hover:      #a21caf;
+  --color-accent-active:     #86198f;
+  --color-status-online:     #fb923c;
+  --color-error-bg:          #7c1d1d;
+  --color-error-text:        #fca5a5;
+  --color-link:              #f0abfc;
+  --color-typing-dot:        #6b4575;
+  --color-scrollbar:         #4a2d4e;
+}
