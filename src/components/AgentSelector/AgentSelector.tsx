@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSessionEntries } from '../../hooks/useSessionEntries';
 import { listApps } from '../../services/adkClient';
+import type { AppInfo } from '../../types';
 import BlinkingFace from '../BlinkingFace/BlinkingFace';
 import styles from './agent-selector.module.css';
 
 interface Props {
-  onSelect: (appName: string, starterMessage?: string) => void;
+  onSelect: (appName: string, live: boolean, starterMessage?: string) => void;
 }
 
 export default function AgentSelector({ onSelect }: Props) {
-  const [apps, setApps] = useState<string[]>([]);
+  const [apps, setApps] = useState<AppInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const [selectedApp, setSelectedApp] = useState<AppInfo | null>(null);
   const [starterMessage, setStarterMessage] = useState('');
   const { entries: sessionEntries, updateEntry, removeEntry, addEntry, commitToStorage } = useSessionEntries();
   const [starterOpen, setStarterOpen] = useState(false);
@@ -27,7 +28,7 @@ export default function AgentSelector({ onSelect }: Props) {
   }, []);
 
   const handleAgentChange = (appName: string) => {
-    setSelectedApp(appName || null);
+    setSelectedApp(apps.find((a) => a.name === appName) ?? null);
     setStarterMessage('');
     setStarterOpen(false);
     setSessionOpen(false);
@@ -44,7 +45,7 @@ export default function AgentSelector({ onSelect }: Props) {
       message = message ? `${message}\n\n${json}` : json;
     }
 
-    onSelect(selectedApp, message || undefined);
+    onSelect(selectedApp.name, selectedApp.live, message || undefined);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -75,15 +76,24 @@ export default function AgentSelector({ onSelect }: Props) {
           <div className={styles.selectWrapper}>
             <select
               className={styles.select}
-              value={selectedApp ?? ''}
+              value={selectedApp?.name ?? ''}
               onChange={(e) => handleAgentChange(e.target.value)}
             >
               <option value="" disabled>Select an agent…</option>
-              {apps.map((appName) => (
-                <option key={appName} value={appName}>{appName}</option>
+              {apps.map((app) => (
+                <option key={app.name} value={app.name}>
+                  {app.name}{app.live ? ' · LIVE' : ''}
+                </option>
               ))}
             </select>
             <span className={styles.selectChevron}>›</span>
+          </div>
+        )}
+
+        {selectedApp?.live && (
+          <div className={styles.liveBadge}>
+            <span className={styles.liveDot} />
+            Live agent — voice &amp; real-time streaming
           </div>
         )}
 
@@ -148,7 +158,7 @@ export default function AgentSelector({ onSelect }: Props) {
           </div>
 
           <div className={styles.starterActions}>
-            <button className={styles.backBtn} onClick={() => setSelectedApp(null)}>
+            <button className={styles.backBtn} onClick={() => { setSelectedApp(null); setStarterOpen(false); setSessionOpen(false); }}>
               ← Back
             </button>
             <button className={styles.startBtn} onClick={handleStart}>

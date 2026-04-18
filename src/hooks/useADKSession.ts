@@ -10,14 +10,16 @@ export function useADKSession(
   userId: string,
   appName: string,
   initialMessage?: string,
-  options?: { onThemeChange?: (name: string) => void },
+  options?: { onThemeChange?: (name: string) => void; enabled?: boolean },
 ) {
+  const enabled = options?.enabled !== false;
   const sessionRef = useRef<ADKSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     sessionRef.current = null;
 

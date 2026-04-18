@@ -44,6 +44,11 @@ export interface ImageMessage extends BaseMessage {
 
 export type ChatMessage = TextMessage | CarouselMessage | VoiceMessage | ImageMessage;
 
+export interface AppInfo {
+  name: string;
+  live: boolean;
+}
+
 export interface ADKSession {
   sessionId: string;
   userId: string;

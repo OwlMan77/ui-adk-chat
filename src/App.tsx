@@ -7,6 +7,7 @@ const USER_ID = 'user-001'; // replace with real auth later
 
 interface ChatConfig {
   appName: string;
+  live: boolean;
   starterMessage?: string;
 }
 
@@ -17,7 +18,7 @@ export default function App() {
   if (!config) {
     return (
       <AgentSelector
-        onSelect={(appName, starterMessage) => setConfig({ appName, starterMessage })}
+        onSelect={(appName, live, starterMessage) => setConfig({ appName, live, starterMessage })}
       />
     );
   }
@@ -26,6 +27,7 @@ export default function App() {
     <ChatWindow
       userId={USER_ID}
       appName={config.appName}
+      live={config.live}
       initialMessage={config.starterMessage}
       onChangeAgent={() => setConfig(null)}
       onThemeChange={setTheme}

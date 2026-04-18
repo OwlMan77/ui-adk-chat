@@ -1,4 +1,4 @@
-import type { ADKSession, ADKStreamEvent } from '../types';
+import type { ADKSession, ADKStreamEvent, AppInfo } from '../types';
 import type { RunAgentRequest, EventOutput, PartInput } from '../types/adk.dto';
 
 const ADK_BASE_URL = import.meta.env.VITE_ADK_BASE_URL ?? 'http://localhost:8000';
@@ -21,14 +21,15 @@ export async function createSession(userId: string, appName: string = APP_NAME):
   };
 }
 
-export async function listApps(): Promise<string[]> {
+export async function listApps(): Promise<AppInfo[]> {
   const res = await fetch(`${ADK_BASE_URL}/list-apps`);
   if (!res.ok) throw new Error(`Failed to fetch apps: ${res.statusText}`);
   const data = await res.json();
-  // ADK returns an array of app name strings or objects with a name field
   if (Array.isArray(data)) {
-    return data.map((item: string | { name: string }) =>
-      typeof item === 'string' ? item : item.name
+    return data.map((item: string | Partial<AppInfo>) =>
+      typeof item === 'string'
+        ? { name: item, live: false }
+        : { name: item.name ?? '', live: item.live ?? false }
     );
   }
   return [];
