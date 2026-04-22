@@ -54,6 +54,8 @@ export default function ChatWindow({ userId, appName, live = false, initialMessa
         muted={liveSession.muted}
         onToggleMute={liveSession.toggleMute}
         onEndCall={onChangeAgent}
+        messages={liveSession.messages}
+        streaming={liveSession.streaming}
       />
     );
   }

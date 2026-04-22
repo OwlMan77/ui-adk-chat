@@ -5,10 +5,18 @@ import type { ADKSession, ChatMessage, TextMessage, VoiceMessage, ImageMessage }
 const ADK_BASE_URL = import.meta.env.VITE_ADK_BASE_URL ?? 'http://localhost:8000';
 const WS_BASE_URL = ADK_BASE_URL.replace(/^http/, 'ws');
 
-const MIC_SAMPLE_RATE = 16000;
+const REC_SAMPLE_RATE = 16000;
+const PLAY_SAMPLE_RATE = 24000; // CSM/OmniVoice output rate
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function base64ToArrayBuffer(b64: string): ArrayBuffer {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
 }
 
 export function useLiveSession(
@@ -21,14 +29,15 @@ export function useLiveSession(
   const sessionRef = useRef<ADKSession | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Mic audio graph
+  // Mic audio graph (16 kHz AudioWorklet)
   const micCtxRef = useRef<AudioContext | null>(null);
   const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const recorderNodeRef = useRef<AudioWorkletNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
 
-  // Playback audio graph (for visualisation)
+  // Playback audio graph (24 kHz AudioWorklet ring buffer)
   const playCtxRef = useRef<AudioContext | null>(null);
+  const playerNodeRef = useRef<AudioWorkletNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -41,103 +50,166 @@ export function useLiveSession(
   const agentTextRef = useRef('');
   const agentIdRef = useRef(uid());
 
-  const getPlayCtx = useCallback(() => {
-    if (!playCtxRef.current || playCtxRef.current.state === 'closed') {
-      const ctx = new AudioContext();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.8;
-      analyser.connect(ctx.destination);
-      playCtxRef.current = ctx;
-      analyserRef.current = analyser;
-    }
-    return { ctx: playCtxRef.current, analyser: analyserRef.current! };
+  // ── Mic ──────────────────────────────────────────────────────────────────
+
+  const stopMic = useCallback(() => {
+    recorderNodeRef.current?.disconnect();
+    micSourceRef.current?.disconnect();
+    micCtxRef.current?.close();
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    recorderNodeRef.current = null;
+    micSourceRef.current = null;
+    micCtxRef.current = null;
+    micStreamRef.current = null;
+    setMicActive(false);
   }, []);
 
-  const playAudio = useCallback((bytes: ArrayBuffer) => {
-    const { ctx, analyser } = getPlayCtx();
-    ctx.decodeAudioData(bytes.slice(0), (buffer) => {
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(analyser);
-      source.start();
-    });
-  }, [getPlayCtx]);
+  const startMic = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+      micStreamRef.current = stream;
+
+      const ctx = new AudioContext({ sampleRate: REC_SAMPLE_RATE });
+      micCtxRef.current = ctx;
+
+      await ctx.audioWorklet.addModule('/pcm-recorder-processor.js');
+
+      const source = ctx.createMediaStreamSource(stream);
+      micSourceRef.current = source;
+
+      const recorderNode = new AudioWorkletNode(ctx, 'pcm-recorder-processor');
+      recorderNodeRef.current = recorderNode;
+
+      recorderNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN || mutedRef.current) return;
+        const float32 = e.data;
+        const int16 = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
+        }
+        ws.send(int16.buffer);
+      };
+
+      source.connect(recorderNode);
+      // Silent gain keeps the worklet in the rendering graph without echo.
+      const silent = ctx.createGain();
+      silent.gain.value = 0;
+      recorderNode.connect(silent);
+      silent.connect(ctx.destination);
+
+      setMicActive(true);
+    } catch (e) {
+      setError(`Microphone error: ${e}`);
+    }
+  }, []);
+
+  // ── Message handler ───────────────────────────────────────────────────────
 
   const handleWsMessage = useCallback((event: MessageEvent) => {
-    if (event.data instanceof ArrayBuffer) {
-      playAudio(event.data);
-      return;
-    }
-    if (event.data instanceof Blob) {
-      event.data.arrayBuffer().then(playAudio);
-      return;
-    }
+    if (typeof event.data !== 'string') return;
 
     try {
-      const data = JSON.parse(event.data as string);
-      const parts = typeof data.content === 'object' ? data.content?.parts ?? [] : [];
-      const text = parts.map((p: { text?: string }) => p.text ?? '').join('');
+      const msg = JSON.parse(event.data as string);
+      console.log('[WS]', JSON.stringify(msg).slice(0, 300));
 
-      if (text) {
-        agentTextRef.current += text;
-        const id = agentIdRef.current;
-        setMessages((prev) => {
-          const existing = prev.find((m) => m.id === id);
-          if (existing) {
-            return prev.map((m) =>
-              m.id === id ? { ...m, text: agentTextRef.current } as TextMessage : m
-            );
-          }
-          return [...prev, {
-            id,
-            role: 'agent',
-            type: 'text',
-            text: agentTextRef.current,
-            timestamp: Date.now(),
-          } as TextMessage];
-        });
+      // ADK bidi event envelope — content.parts holds text and/or audio
+      const parts: Array<Record<string, unknown>> =
+        (msg.content as { parts?: Array<Record<string, unknown>> })?.parts ?? [];
+
+      // CSM TTS audio — inlineData with audio/pcm
+      for (const part of parts) {
+        const inline = part.inlineData as { mimeType?: string; data?: string } | undefined;
+        if (inline?.mimeType?.startsWith('audio/pcm') && inline.data) {
+          playerNodeRef.current?.port.postMessage(base64ToArrayBuffer(inline.data));
+        }
       }
 
-      if (data.partial === false) {
+      // User audio transcription (author: 'user', content.parts[].text)
+      if (msg.author === 'user') {
+        for (const part of parts) {
+          if (typeof part.text === 'string' && part.text) {
+            setMessages((prev) => [...prev, {
+              id: uid(), role: 'user', type: 'text', text: part.text as string, timestamp: Date.now(),
+            } as TextMessage]);
+          }
+        }
+      }
+
+      // Agent text from ADK bidi event (author != 'user', content.parts[].text)
+      if (msg.author && msg.author !== 'user') {
+        for (const part of parts) {
+          if (typeof part.text === 'string' && part.text) {
+            const id = agentIdRef.current;
+            agentTextRef.current += part.text as string;
+            setStreaming(true);
+            setMessages((prev) => {
+              const existing = prev.find((m) => m.id === id);
+              if (existing) {
+                return prev.map((m) =>
+                  m.id === id ? { ...m, text: agentTextRef.current } as TextMessage : m,
+                );
+              }
+              return [...prev, {
+                id, role: 'agent', type: 'text', text: agentTextRef.current, timestamp: Date.now(),
+              } as TextMessage];
+            });
+          }
+        }
+      }
+
+      if (msg.partial === false) {
         agentTextRef.current = '';
         agentIdRef.current = uid();
         setStreaming(false);
       }
 
-      if (data.type === 'theme' && data.name) {
-        options?.onThemeChange?.(data.name);
+      if (msg.type === 'theme' && msg.name) {
+        options?.onThemeChange?.(msg.name as string);
       }
     } catch {
       // non-JSON frame, ignore
     }
-  }, [playAudio, options]);
+  }, [options]);
+
+  // ── Session lifecycle ─────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
 
-    createSession(userId, appName)
-      .then((session) => {
-        if (cancelled) return;
-        sessionRef.current = session;
+    async function setup() {
+      // Init playback AudioWorklet ring buffer
+      const ctx = new AudioContext({ sampleRate: PLAY_SAMPLE_RATE });
+      await ctx.audioWorklet.addModule('/pcm-player-processor.js');
+      const playerNode = new AudioWorkletNode(ctx, 'pcm-player-processor');
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      playerNode.connect(analyser);
+      analyser.connect(ctx.destination);
+      if (cancelled) { ctx.close(); return; }
+      playCtxRef.current = ctx;
+      playerNodeRef.current = playerNode;
+      analyserRef.current = analyser;
 
-        const ws = new WebSocket(
-          `${WS_BASE_URL}/ws/${session.userId}/${session.sessionId}`
-        );
-        ws.binaryType = 'arraybuffer';
-        wsRef.current = ws;
+      const session = await createSession(userId, appName);
+      if (cancelled) return;
+      sessionRef.current = session;
 
-        ws.onmessage = handleWsMessage;
-        ws.onerror = () => { if (!cancelled) setError('WebSocket error'); };
-        ws.onclose = () => { if (!cancelled) wsRef.current = null; };
+      const ws = new WebSocket(`${WS_BASE_URL}/ws/${session.userId}/${session.sessionId}`);
+      ws.binaryType = 'arraybuffer';
+      wsRef.current = ws;
+      ws.onmessage = handleWsMessage;
+      ws.onerror = () => { if (!cancelled) setError('WebSocket error'); };
+      ws.onclose = () => { if (!cancelled) wsRef.current = null; };
+      ws.onopen = () => {
+        if (initialMessage) sendText(initialMessage, { hideUserBubble: true });
+        startMic();
+      };
+    }
 
-        ws.onopen = () => {
-          if (initialMessage) sendText(initialMessage, { hideUserBubble: true });
-          startMic();
-        };
-      })
-      .catch((e) => { if (!cancelled) setError(String(e)); });
+    setup().catch((e) => { if (!cancelled) setError(String(e)); });
 
     return () => {
       cancelled = true;
@@ -146,85 +218,22 @@ export function useLiveSession(
       wsRef.current = null;
       playCtxRef.current?.close();
       playCtxRef.current = null;
+      playerNodeRef.current = null;
       analyserRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, appName, enabled]);
 
-  const startMic = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
-
-      const ctx = new AudioContext();
-      micCtxRef.current = ctx;
-
-      const source = ctx.createMediaStreamSource(stream);
-      micSourceRef.current = source;
-
-      const nativeRate = ctx.sampleRate;
-      const ratio = nativeRate / MIC_SAMPLE_RATE;
-      const inputBufferSize = 4096;
-
-      const processor = ctx.createScriptProcessor(inputBufferSize, 1, 1);
-      processorRef.current = processor;
-
-      processor.onaudioprocess = (e) => {
-        const ws = wsRef.current;
-        if (!ws || ws.readyState !== WebSocket.OPEN || mutedRef.current) return;
-
-        const input = e.inputBuffer.getChannelData(0);
-        const outLength = Math.round(input.length / ratio);
-        const int16 = new Int16Array(outLength);
-
-        for (let i = 0; i < outLength; i++) {
-          const srcIdx = i * ratio;
-          const lo = Math.floor(srcIdx);
-          const hi = Math.min(lo + 1, input.length - 1);
-          const frac = srcIdx - lo;
-          const sample = input[lo] + frac * (input[hi] - input[lo]);
-          int16[i] = Math.max(-32768, Math.min(32767, sample * 32768));
-        }
-
-        ws.send(int16.buffer);
-      };
-
-      source.connect(processor);
-      processor.connect(ctx.destination);
-      setMicActive(true);
-    } catch (e) {
-      setError(`Microphone error: ${e}`);
-    }
-  }, []);
-
-  const stopMic = useCallback(() => {
-    processorRef.current?.disconnect();
-    micSourceRef.current?.disconnect();
-    micCtxRef.current?.close();
-    micStreamRef.current?.getTracks().forEach((t) => t.stop());
-    processorRef.current = null;
-    micSourceRef.current = null;
-    micCtxRef.current = null;
-    micStreamRef.current = null;
-    setMicActive(false);
-  }, []);
-
-  const toggleMute = useCallback(() => {
-    const next = !mutedRef.current;
-    mutedRef.current = next;
-    setMuted(next);
-  }, []);
+  // ── Actions ───────────────────────────────────────────────────────────────
 
   const sendText = (text: string, opts?: { hideUserBubble?: boolean }) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
     if (!opts?.hideUserBubble) {
       setMessages((prev) => [...prev, {
         id: uid(), role: 'user', type: 'text', text, timestamp: Date.now(),
       } as TextMessage]);
     }
-
     agentTextRef.current = '';
     agentIdRef.current = uid();
     setStreaming(true);
@@ -255,6 +264,12 @@ export function useLiveSession(
     };
     reader.readAsDataURL(msg.imageBlob);
   };
+
+  const toggleMute = useCallback(() => {
+    const next = !mutedRef.current;
+    mutedRef.current = next;
+    setMuted(next);
+  }, []);
 
   const clearMessages = () => setMessages([]);
 

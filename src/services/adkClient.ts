@@ -116,21 +116,32 @@ export async function* streamMessage(
 // followed by plain markdown — so we extract and yield both events when present.
 function parseADKEvent(event: EventOutput): ADKStreamEvent[] {
   const parts = event.content?.parts;
-  if (!parts?.[0]?.text) return [{ type: 'done' }];
+  if (!parts?.length) return [{ type: 'done' }];
 
-  const text = parts[0].text;
+  const results: ADKStreamEvent[] = [];
 
-  // Skip partial streaming events — ADK sends the full text again in the final partial:false event.
-  if (event.partial === true) return [{ type: 'done' }];
+  // Check function responses first (e.g. set_theme tool result)
+  for (const part of parts) {
+    const fr = part.functionResponse;
+    if (fr?.name === 'set_theme' && typeof fr.response?.name === 'string') {
+      results.push({ type: 'theme', themeName: fr.response.name as string });
+    }
+  }
+
+  // Skip partial streaming text events — ADK resends full text in the final partial:false event.
+  if (event.partial === true) return results.length ? results : [{ type: 'done' }];
+
+  const text = parts[0]?.text;
+  if (!text) return results.length ? results : [{ type: 'done' }];
 
   // Try the whole text as pure JSON first.
   try {
     const parsed = JSON.parse(text);
     if (parsed.type === 'carousel' && Array.isArray(parsed.items)) {
-      return [{ type: 'carousel', items: parsed.items }];
+      return [...results, { type: 'carousel', items: parsed.items }];
     }
     if (parsed.type === 'theme' && typeof parsed.name === 'string') {
-      return [{ type: 'theme', themeName: parsed.name }];
+      return [...results, { type: 'theme', themeName: parsed.name }];
     }
   } catch { /* not pure JSON */ }
 
@@ -141,17 +152,17 @@ function parseADKEvent(event: EventOutput): ADKStreamEvent[] {
       const parsed = JSON.parse(text.slice(0, nl));
       const rest = text.slice(nl + 1);
       if (parsed.type === 'carousel' && Array.isArray(parsed.items)) {
-        const events: ADKStreamEvent[] = [{ type: 'carousel', items: parsed.items }];
+        const events: ADKStreamEvent[] = [...results, { type: 'carousel', items: parsed.items }];
         if (rest.trim()) events.push({ type: 'text', content: rest });
         return events;
       }
       if (parsed.type === 'theme' && typeof parsed.name === 'string') {
-        const events: ADKStreamEvent[] = [{ type: 'theme', themeName: parsed.name }];
+        const events: ADKStreamEvent[] = [...results, { type: 'theme', themeName: parsed.name }];
         if (rest.trim()) events.push({ type: 'text', content: rest });
         return events;
       }
     } catch { /* first line not JSON */ }
   }
 
-  return [{ type: 'text', content: text }];
+  return [...results, { type: 'text', content: text }];
 }

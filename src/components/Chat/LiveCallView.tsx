@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { ChatMessage, TextMessage } from '../../types';
 import styles from './live-call.module.css';
 
 interface Props {
@@ -7,78 +8,42 @@ interface Props {
   muted: boolean;
   onToggleMute: () => void;
   onEndCall: () => void;
+  messages: ChatMessage[];
+  streaming: boolean;
 }
 
-export default function LiveCallView({ agentName, analyserRef, muted, onToggleMute, onEndCall }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
+export default function LiveCallView({ agentName, muted, onToggleMute, onEndCall, messages, streaming }: Props) {
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
+    const el = transcriptRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
 
-    const draw = () => {
-      rafRef.current = requestAnimationFrame(draw);
-
-      const analyser = analyserRef.current;
-      const W = canvas.width;
-      const H = canvas.height;
-      const cx = W / 2;
-      const cy = H / 2;
-
-      ctx.clearRect(0, 0, W, H);
-
-      let amplitude = 0;
-      if (analyser) {
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(data);
-        const sum = data.reduce((a, b) => a + b, 0);
-        amplitude = sum / (data.length * 255);
-      }
-
-      // Idle pulse: slow sine when no audio
-      const idlePulse = 0.03 * Math.sin(Date.now() / 600);
-      const scale = 1 + idlePulse + amplitude * 0.5;
-
-      const baseRadius = Math.min(W, H) * 0.22;
-      const r = baseRadius * scale;
-
-      // Outer glow rings
-      const glowLayers = 3;
-      for (let i = glowLayers; i >= 1; i--) {
-        const glowR = r + i * 18 * amplitude;
-        const alpha = (amplitude * 0.4 * (1 - i / (glowLayers + 1)));
-        ctx.beginPath();
-        ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(99, 179, 237, ${alpha})`;
-        ctx.fill();
-      }
-
-      // Main circle with gradient
-      const grad = ctx.createRadialGradient(cx, cy - r * 0.2, r * 0.1, cx, cy, r);
-      grad.addColorStop(0, '#90cdf4');
-      grad.addColorStop(1, '#3182ce');
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-    };
-
-    draw();
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [analyserRef]);
+  const lastMsg = messages[messages.length - 1];
+  const lastAgent = lastMsg?.role === 'agent' || streaming
+    ? ([...messages].reverse().find((m) => m.role === 'agent') as TextMessage | undefined)
+    : undefined;
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user') as TextMessage | undefined;
 
   return (
     <div className={styles.container}>
       <div className={styles.agentName}>{agentName}</div>
 
-      <canvas
-        ref={canvasRef}
-        className={styles.canvas}
-        width={320}
-        height={320}
-      />
+      <div className={styles.transcript} ref={transcriptRef}>
+        {lastUser && (
+          <div className={styles.transcriptUser}>{lastUser.text}</div>
+        )}
+        {lastAgent && (
+          <div className={styles.transcriptAgent}>
+            {lastAgent.text}
+            {streaming && <span className={styles.cursor}>▋</span>}
+          </div>
+        )}
+        {!lastUser && !lastAgent && (
+          <div className={styles.transcriptPlaceholder}>Listening…</div>
+        )}
+      </div>
 
       <div className={styles.status}>
         {muted ? 'Microphone muted' : 'Listening…'}
