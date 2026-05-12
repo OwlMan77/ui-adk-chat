@@ -1,4 +1,3 @@
 ## Upcoming features
 
-- Live chat support
-- UI reworks for audio
+- UI updates for live, make it more interactive.
