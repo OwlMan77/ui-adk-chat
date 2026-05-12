@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { ChatMessage } from '../../types';
+import type { ChatMessage, CarouselItem } from '../../types';
 import TextMessage from '../messages/TextMessage';
 import CarouselMessage from '../messages/CarouselMessage';
 import VoiceMessage from '../messages/VoiceMessage';
@@ -9,7 +9,7 @@ import styles from './chat.module.css';
 interface Props {
   messages: ChatMessage[];
   streaming: boolean;
-  onSelectCarouselItem: (id: string) => void;
+  onSelectCarouselItem: (item: CarouselItem) => void;
 }
 
 export default function MessageList({ messages, streaming, onSelectCarouselItem }: Props) {

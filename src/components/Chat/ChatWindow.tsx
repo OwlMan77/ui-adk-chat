@@ -89,7 +89,10 @@ export default function ChatWindow({ userId, appName, live = false, initialMessa
       <MessageList
         messages={messages}
         streaming={streaming}
-        onSelectCarouselItem={(id) => sendText(id, { hideUserBubble: true })}
+        onSelectCarouselItem={(item) => {
+          const label = item.actionLabel ?? item.content.split('\n').find(l => l.trim()) ?? item.id;
+          sendText(`I selected: ${label}`, { hideUserBubble: true });
+        }}
       />
 
       {error && <div className={styles.errorBar}>{error}</div>}

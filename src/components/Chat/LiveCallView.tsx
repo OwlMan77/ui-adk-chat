@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ChatMessage, TextMessage } from '../../types';
+import AgentVisualizer from './AgentVisualizer';
 import styles from './live-call.module.css';
 
 interface Props {
@@ -12,7 +13,7 @@ interface Props {
   streaming: boolean;
 }
 
-export default function LiveCallView({ agentName, muted, onToggleMute, onEndCall, messages, streaming }: Props) {
+export default function LiveCallView({ agentName, analyserRef, muted, onToggleMute, onEndCall, messages, streaming }: Props) {
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,6 +30,10 @@ export default function LiveCallView({ agentName, muted, onToggleMute, onEndCall
   return (
     <div className={styles.container}>
       <div className={styles.agentName}>{agentName}</div>
+
+      <div className={styles.visualizer}>
+        <AgentVisualizer analyserRef={analyserRef} streaming={streaming} size={160} />
+      </div>
 
       <div className={styles.transcript} ref={transcriptRef}>
         {lastUser && (

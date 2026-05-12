@@ -61,10 +61,39 @@ export interface ADKSendPayload {
   userId: string;
 }
 
-export interface ADKStreamEvent {
-  type: 'text' | 'carousel' | 'done' | 'error' | 'theme';
-  content?: string;
-  items?: CarouselItem[];
-  error?: string;
-  themeName?: string;
+export interface CustomThemeColors {
+  /* Global */
+  bgPrimary?: string;
+  bgSecondary?: string;
+  border?: string;
+  textPrimary?: string;
+  textMuted?: string;
+  textPlaceholder?: string;
+  accent?: string;
+  accentHover?: string;
+  accentText?: string;
+  link?: string;
+  /* Bubble-specific */
+  bubbleUserBg?: string;
+  bubbleUserText?: string;
+  bubbleAgentText?: string;
+  bubbleCodeBg?: string;
+  bubblePreBg?: string;
+  bubbleTableBorder?: string;
+  bubbleTableHeaderBg?: string;
+  bubbleBlockquote?: string;
+  bubbleHr?: string;
 }
+
+export type ADKStreamEvent =
+  | { type: 'text';         content: string }
+  | { type: 'carousel';     items: CarouselItem[] }
+  | { type: 'agent_image';  imageData: { mimeType: string; data: string } }
+  | { type: 'theme';        themeName: string }
+  | { type: 'custom_theme'; customThemeColors: CustomThemeColors }
+  | { type: 'error';        error: string }
+  | { type: 'done' };
+
+export type Handler<T extends ADKStreamEvent> = (event: T, agentId: string, agentText: { current: string }) => void;
+
+export type EventHandlers = { [E in ADKStreamEvent as E['type']]?: Handler<E> };

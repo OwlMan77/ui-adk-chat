@@ -109,60 +109,77 @@ export async function* streamMessage(
   yield { type: 'done' };
 }
 
-// Maps a raw EventOutput from the ADK SSE stream to our internal ADKStreamEvent shape.
-// ADK sends each text response twice: partial:true (streaming) then partial:false (final).
-// We skip partial:true to avoid duplicating the text.
-// The agent may prefix structured JSON (theme/carousel) on the first line of the text,
-// followed by plain markdown — so we extract and yield both events when present.
-function parseADKEvent(event: EventOutput): ADKStreamEvent[] {
-  const parts = event.content?.parts;
-  if (!parts?.length) return [{ type: 'done' }];
+type FnResponseHandler = (response: Record<string, unknown>) => ADKStreamEvent | null;
 
-  const results: ADKStreamEvent[] = [];
+const functionResponseHandlers: Record<string, FnResponseHandler> = {
+  set_theme:        (r) => typeof r.name === 'string'
+                             ? { type: 'theme', themeName: r.name }
+                             : null,
+  set_custom_theme: (r) => ({ type: 'custom_theme', customThemeColors: r as import('../types').CustomThemeColors }),
+  show_options:     (r) => typeof r.result === 'string'
+                             ? { type: 'text', content: r.result }
+                             : null,
+  create_table:     (r) => typeof r.result === 'string'
+                             ? { type: 'text', content: r.result }
+                             : null,
+  generate_image:   (r) => typeof r.mimeType === 'string' && typeof r.data === 'string'
+                             ? { type: 'agent_image', imageData: { mimeType: r.mimeType, data: r.data } }
+                             : null,
+  show_carousel:    (r) => {
+    try {
+      const parsed = JSON.parse(r.result as string);
+      if (parsed.type === 'carousel' && Array.isArray(parsed.items))
+        return { type: 'carousel', items: parsed.items };
+    } catch { /* not JSON */ }
+    return null;
+  },
+};
 
-  // Check function responses first (e.g. set_theme tool result)
-  for (const part of parts) {
-    const fr = part.functionResponse;
-    if (fr?.name === 'set_theme' && typeof fr.response?.name === 'string') {
-      results.push({ type: 'theme', themeName: fr.response.name as string });
-    }
-  }
-
-  // Skip partial streaming text events — ADK resends full text in the final partial:false event.
-  if (event.partial === true) return results.length ? results : [{ type: 'done' }];
-
-  const text = parts[0]?.text;
-  if (!text) return results.length ? results : [{ type: 'done' }];
-
-  // Try the whole text as pure JSON first.
+function tryParseStructured(json: string): ADKStreamEvent | null {
   try {
-    const parsed = JSON.parse(text);
-    if (parsed.type === 'carousel' && Array.isArray(parsed.items)) {
-      return [...results, { type: 'carousel', items: parsed.items }];
-    }
-    if (parsed.type === 'theme' && typeof parsed.name === 'string') {
-      return [...results, { type: 'theme', themeName: parsed.name }];
-    }
-  } catch { /* not pure JSON */ }
+    const parsed = JSON.parse(json);
+    if (parsed.type === 'carousel' && Array.isArray(parsed.items))
+      return { type: 'carousel', items: parsed.items };
+    if (parsed.type === 'theme' && typeof parsed.name === 'string')
+      return { type: 'theme', themeName: parsed.name };
+  } catch { /* not JSON */ }
+  return null;
+}
 
-  // Agent may prefix a JSON object on the first line followed by plain text.
+// The agent may return pure JSON or prefix JSON on the first line followed by markdown.
+function parseTextContent(text: string): ADKStreamEvent[] {
+  const whole = tryParseStructured(text);
+  if (whole) return [whole];
+
   const nl = text.indexOf('\n');
   if (nl !== -1) {
-    try {
-      const parsed = JSON.parse(text.slice(0, nl));
-      const rest = text.slice(nl + 1);
-      if (parsed.type === 'carousel' && Array.isArray(parsed.items)) {
-        const events: ADKStreamEvent[] = [...results, { type: 'carousel', items: parsed.items }];
-        if (rest.trim()) events.push({ type: 'text', content: rest });
-        return events;
-      }
-      if (parsed.type === 'theme' && typeof parsed.name === 'string') {
-        const events: ADKStreamEvent[] = [...results, { type: 'theme', themeName: parsed.name }];
-        if (rest.trim()) events.push({ type: 'text', content: rest });
-        return events;
-      }
-    } catch { /* first line not JSON */ }
+    const structured = tryParseStructured(text.slice(0, nl));
+    if (structured) {
+      const rest = text.slice(nl + 1).trim();
+      return rest ? [structured, { type: 'text', content: rest }] : [structured];
+    }
   }
 
-  return [...results, { type: 'text', content: text }];
+  return [{ type: 'text', content: text }];
+}
+
+// ADK sends text events twice: partial:true (streaming chunk) then partial:false (final).
+// We skip partial:true to avoid duplicating text, but still emit any function response events.
+function parseADKEvent(event: EventOutput): ADKStreamEvent[] {
+  const parts = event.content?.parts;
+  if (!parts?.length) return [];
+
+  const functionEvents = parts.flatMap((part) => {
+    const fr = part.functionResponse;
+    if (!fr?.name || !fr.response) return [];
+    const event = functionResponseHandlers[fr.name]?.(fr.response as Record<string, unknown>);
+    return event ? [event] : [];
+  });
+
+  if (event.partial === true) return functionEvents;
+
+  const text = parts[0]?.text;
+  if (!text) return functionEvents;
+
+  return [...functionEvents, ...parseTextContent(text)];
 }

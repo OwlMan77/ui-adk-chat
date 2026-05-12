@@ -9,12 +9,23 @@ export function useVoiceRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   const start = async () => {
     chunksRef.current = [];
     setAudioBlob(null);
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const audioCtx = new AudioContext();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+    source.connect(analyser);
+    audioCtxRef.current = audioCtx;
+    analyserRef.current = analyser;
+
     const recorder = new MediaRecorder(stream);
     mediaRecorderRef.current = recorder;
 
@@ -27,6 +38,8 @@ export function useVoiceRecorder() {
       setAudioBlob(blob);
       setDurationMs(Date.now() - startTimeRef.current);
       stream.getTracks().forEach((t) => t.stop());
+      audioCtx.close();
+      analyserRef.current = null;
     };
 
     startTimeRef.current = Date.now();
@@ -45,5 +58,5 @@ export function useVoiceRecorder() {
     setState('idle');
   };
 
-  return { state, audioBlob, durationMs, start, stop, reset };
+  return { state, audioBlob, durationMs, analyserRef, start, stop, reset };
 }
