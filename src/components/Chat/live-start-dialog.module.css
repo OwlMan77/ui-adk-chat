@@ -91,3 +91,26 @@
 .confirmBtn:hover {
   background: #16a34a;
 }
+
+.waking {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+  text-align: center;
+}
+
+.waking::after {
+  animation: wakingDots 1.4s steps(4, end) infinite;
+  content: '';
+}
+
+@keyframes wakingDots {
+  0%   { content: ''; }
+  25%  { content: '.'; }
+  50%  { content: '..'; }
+  75%  { content: '...'; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waking::after { animation: none; content: ''; }
+}

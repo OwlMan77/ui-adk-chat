@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useADKSession } from '../../hooks/useADKSession';
 import { useLiveSession } from '../../hooks/useLiveSession';
+import { useWarmBackend } from '../../hooks/useWarmBackend';
 import type { VoiceMessage, ImageMessage } from '../../types';
 import BlinkingFace from '../BlinkingFace/BlinkingFace';
 import MessageList from './MessageList';
@@ -20,6 +21,16 @@ interface Props {
 
 export default function ChatWindow({ userId, appName, live = false, initialMessage, onChangeAgent, onThemeChange }: Props) {
   const [liveConfirmed, setLiveConfirmed] = useState(false);
+
+  // The voice GPU scales to zero. Start waking it the moment a live agent is
+  // selected — while the dialog is still on screen and the user is reading it
+  // and granting mic access. That is several seconds of human time that would
+  // otherwise be spent waiting for a cold start after they have said hello.
+  //
+  // Deliberately not gated on !liveConfirmed: someone who clicks straight
+  // through arrives in the call before the GPU is up, and the face should show
+  // that honestly rather than sitting silent.
+  const waking = useWarmBackend(live);
 
   const adkSession = useADKSession(userId, appName, initialMessage, { onThemeChange, enabled: !live });
   const liveSession = useLiveSession(userId, appName, initialMessage, { onThemeChange, enabled: live && liveConfirmed });
@@ -51,11 +62,15 @@ export default function ChatWindow({ userId, appName, live = false, initialMessa
       <LiveCallView
         agentName={appName}
         analyserRef={liveSession.analyserRef}
+        micAnalyserRef={liveSession.micAnalyserRef}
+        cueBus={liveSession.cueBus}
+        audioClockMs={liveSession.audioClockMs}
         muted={liveSession.muted}
         onToggleMute={liveSession.toggleMute}
         onEndCall={onChangeAgent}
         messages={liveSession.messages}
         streaming={liveSession.streaming}
+        waking={waking}
       />
     );
   }
@@ -65,6 +80,7 @@ export default function ChatWindow({ userId, appName, live = false, initialMessa
       {live && !liveConfirmed && (
         <LiveStartDialog
           agentName={appName}
+          waking={waking}
           onConfirm={handleConfirmLive}
           onCancel={handleCancelLive}
         />
