@@ -56,7 +56,7 @@ export default function ShapeSheet() {
           <h2 style={{ font: '600 14px system-ui', color: 'var(--color-text-primary)', margin: '0 0 10px' }}>
             {character.label}
           </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             {POSES.map(([label, pose]) => (
               <Cell key={label} label={label} pose={pose} character={character} />
             ))}

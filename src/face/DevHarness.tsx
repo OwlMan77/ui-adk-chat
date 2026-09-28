@@ -11,8 +11,12 @@ export default function DevHarness() {
   const [on, setOn] = useState(false);
   const cues = useMemo(() => createCueBus(), []);
   const clockRef = useRef(0);
+  const timersRef = useRef<ReturnType<typeof setInterval>[]>([]);
 
-  useEffect(() => () => { ctxRef.current?.close(); }, []);
+  useEffect(() => () => {
+    for (const t of timersRef.current) clearInterval(t);
+    ctxRef.current?.close();
+  }, []);
 
   async function startSynthetic() {
     const ctx = new AudioContext();
@@ -26,6 +30,13 @@ export default function DevHarness() {
 
     // Synthetic "speech": a voiced carrier whose brightness and amplitude both
     // wobble, so the jaw and the lip shape should visibly move independently.
+    //
+    // The envelope below is not decoration. A constant drone is useless here:
+    // audioFeatures keeps an adaptive noise floor, so a signal that never stops
+    // trains the floor up to its own level and the gate correctly classifies it
+    // as room noise -- the mouth then barely moves, and it looks like the rig is
+    // broken when it is in fact doing its job. Real speech is syllabic bursts
+    // separated by silences, so that is what gets scheduled.
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.value = 130;
@@ -42,13 +53,7 @@ export default function DevHarness() {
     lfoF.connect(lfoFGain).connect(filter.frequency);
 
     const amp = ctx.createGain();
-    amp.gain.value = 0.0;
-    const lfoA = ctx.createOscillator();
-    lfoA.frequency.value = 2.3;
-    const lfoAGain = ctx.createGain();
-    lfoAGain.gain.value = 0.35;
-    lfoA.connect(lfoAGain).connect(amp.gain);
-    amp.gain.value = 0.35;
+    amp.gain.value = 0;
 
     osc.connect(filter).connect(amp).connect(analyser);
     // Silent sink: we only want the analyser to see it.
@@ -56,7 +61,32 @@ export default function DevHarness() {
     mute.gain.value = 0;
     analyser.connect(mute).connect(ctx.destination);
 
-    osc.start(); lfoF.start(); lfoA.start();
+    // Schedule syllables ahead of the clock, a few seconds at a time. Irregular
+    // lengths and gaps on purpose -- an even rhythm reads as a machine, and the
+    // minimum-hold logic in mouth.ts only gets exercised by short ones.
+    let at = ctx.currentTime + 0.05;
+    function scheduleSyllables() {
+      const until = ctx.currentTime + 4;
+      while (at < until) {
+        const len = 0.09 + Math.random() * 0.22;
+        const peak = 0.18 + Math.random() * 0.5;
+        amp.gain.setValueAtTime(0.0001, at);
+        amp.gain.exponentialRampToValueAtTime(peak, at + 0.03);
+        amp.gain.setValueAtTime(peak, at + len - 0.04);
+        amp.gain.exponentialRampToValueAtTime(0.0001, at + len);
+        // Vowel colour moves with each syllable, so `wide` and `round` have to
+        // move independently of `open` -- the jaw/lip split this exists to show.
+        filter.frequency.setValueAtTime(420 + Math.random() * 1500, at);
+        // Most gaps are between syllables; occasionally a real pause, which is
+        // what lets the noise floor settle back down.
+        at += len + (Math.random() < 0.18 ? 0.35 + Math.random() * 0.5 : 0.05 + Math.random() * 0.1);
+      }
+    }
+    scheduleSyllables();
+    const timer = setInterval(scheduleSyllables, 2000);
+    timersRef.current.push(timer);
+
+    osc.start(); lfoF.start();
     setOn(true);
   }
 
