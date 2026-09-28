@@ -56,18 +56,60 @@ export function createCueBus(): CueBus {
   };
 }
 
-/** Pulls `[tag]` spans out of a text run. */
-const TAG_RE = /\[([a-z][a-z-]*)\]/gi;
+/**
+ * Pulls `[tag]` spans out of a text run.
+ *
+ * Kept deliberately in step with the server's own vocabulary in `app/cues.py`.
+ * The colon matters: the agent opens each reply with `[mood:warm]`, and a
+ * pattern that only allowed letters and hyphens matched `[laughter]` but not
+ * `[mood:warm]` -- which then survived stripping and appeared verbatim in the
+ * transcript, which is the exact bug this pair of functions exists to prevent.
+ *
+ * Narrow on purpose either way: ordinary bracketed prose, and the `[0]`/`[1]`
+ * of an array index in a code answer, have to pass through untouched.
+ */
+const TAG_RE = /\[([a-z][a-z0-9]*(?:[-:][a-z0-9]+)*)\]/gi;
 
+const MOOD_RE = /^mood[-:]([a-z]+)$/i;
+
+const MOODS: readonly Mood[] = ['neutral', 'warm', 'urgent', 'amused', 'concerned'];
+
+/** Non-verbal cues. Mood is not one -- it is a whole-reply label, see extractMood. */
 export function extractTags(text: string): string[] {
   const out: string[] = [];
   let m: RegExpExecArray | null;
   TAG_RE.lastIndex = 0;
-  while ((m = TAG_RE.exec(text)) !== null) out.push(m[1].toLowerCase());
+  while ((m = TAG_RE.exec(text)) !== null) {
+    const tag = m[1].toLowerCase();
+    if (!MOOD_RE.test(tag)) out.push(tag);
+  }
   return out;
+}
+
+/**
+ * The reply's mood, when the agent declared one.
+ *
+ * Only needed as a fallback: normally the mood arrives on the cue frame
+ * alongside the audio, which is the copy that cannot drift from the voice. This
+ * reads it out of the text instead, for when the server sends no cue frame at
+ * all -- an older build, or a synthesis failure, which is precisely when the
+ * face going blank would be most confusing.
+ */
+export function extractMood(text: string): Mood | undefined {
+  let m: RegExpExecArray | null;
+  TAG_RE.lastIndex = 0;
+  while ((m = TAG_RE.exec(text)) !== null) {
+    const mood = MOOD_RE.exec(m[1].toLowerCase())?.[1] as Mood | undefined;
+    if (mood && MOODS.includes(mood)) return mood;
+  }
+  return undefined;
 }
 
 /** Removes `[tag]` spans so the transcript stops showing them as literal text. */
 export function stripTags(text: string): string {
-  return text.replace(TAG_RE, '').replace(/\s{2,}/g, ' ');
+  return text
+    .replace(TAG_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
+    .trimStart();
 }
