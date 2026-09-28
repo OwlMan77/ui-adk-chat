@@ -11,7 +11,7 @@ import { emptyFeatures } from '../src/face/audioFeatures';
 import type { AudioFeatures } from '../src/face/audioFeatures';
 import { CHANNEL_RATES } from '../src/face/types';
 import { createExpressionLane } from '../src/face/cues';
-import { extractTags, stripTags } from '../src/face/cueBus';
+import { extractMood, extractTags, stripTags } from '../src/face/cueBus';
 
 function speech(overrides: Partial<AudioFeatures> = {}): AudioFeatures {
   return {
@@ -150,4 +150,42 @@ test('tags are extracted for the face and stripped from the transcript', () => {
   const line = 'Well [laughter] that is certainly one way [question-en] to do it.';
   expect(extractTags(line)).toEqual(['laughter', 'question-en']);
   expect(stripTags(line)).toBe('Well that is certainly one way to do it.');
+});
+
+// ── the transcript, and what the agent actually emits ─────────────────────────
+//
+// Caught by driving the real backend over a WebSocket: the agent opens every
+// reply with `[mood:neutral]`, and a client pattern that allowed only letters
+// and hyphens matched `[laughter]` but not that. It survived stripping and would
+// have appeared verbatim in the transcript -- the exact bug this prevents.
+
+test('a declared mood never reaches the transcript', () => {
+  const raw = '[mood:neutral] Hello! Did you know owls cannot move their eyeballs?';
+  expect(stripTags(raw)).toBe('Hello! Did you know owls cannot move their eyeballs?');
+});
+
+test('mood is recovered from the text, not mistaken for a cue', () => {
+  const raw = '[mood:urgent] Move. [laughter] Only joking.';
+  expect(extractMood(raw)).toBe('urgent');
+  expect(extractTags(raw)).toEqual(['laughter']);
+});
+
+test('an invented mood is ignored rather than passed through', () => {
+  // The face has five poses. Anything else must not reach setMood.
+  expect(extractMood('[mood:ecstatic] Wonderful.')).toBeUndefined();
+});
+
+test('a reply with no mood declared yields none', () => {
+  expect(extractMood('Just a plain sentence.')).toBeUndefined();
+});
+
+test('bracketed prose and array indices still survive', () => {
+  const raw = 'The value is at [0] and the next at [1].';
+  expect(stripTags(raw)).toBe(raw);
+  expect(extractTags(raw)).toEqual([]);
+});
+
+test('stripping a leading tag does not leave the line indented', () => {
+  expect(stripTags('[sigh] Fine.')).toBe('Fine.');
+  expect(stripTags('Really [question-en]?')).toBe('Really?');
 });

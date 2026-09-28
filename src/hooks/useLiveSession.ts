@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createSession } from '../services/adkClient';
 import type { ADKSession, ChatMessage, TextMessage, VoiceMessage, ImageMessage } from '../types';
-import { createCueBus, extractTags, stripTags } from '../face/cueBus';
+import { createCueBus, extractMood, extractTags, stripTags } from '../face/cueBus';
 import { FACE_FFT_SIZE, FACE_SMOOTHING } from '../face/audioFeatures';
 import type { Mood } from '../face/cues';
 
@@ -254,6 +254,11 @@ export function useLiveSession(
             // instructions to the voice, not words.
             if (!cue) {
               pendingTagsRef.current.push(...extractTags(part.text as string));
+              // Mood normally rides the cue frame, which is the copy that cannot
+              // drift from the voice. With no cue frame there is no voice either,
+              // so reading it out of the text is strictly better than a blank face.
+              const mood = extractMood(part.text as string);
+              if (mood) cueBus.emitMood(mood);
             }
             agentTextRef.current += stripTags(part.text as string);
             setStreaming(true);
