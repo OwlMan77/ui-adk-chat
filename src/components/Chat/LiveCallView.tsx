@@ -1,20 +1,42 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import type { ChatMessage, TextMessage } from '../../types';
 import AgentVisualizer from './AgentVisualizer';
+import AgentFace from '../../face/AgentFace';
+import type { CueBus } from '../../face/cueBus';
+import { characterFor } from '../../face/skins/characters';
 import styles from './live-call.module.css';
+
+const FACE_PREF_KEY = 'adk-chat.face-enabled';
 
 interface Props {
   agentName: string;
-  analyserRef: React.RefObject<AnalyserNode | null>;
+  analyserRef: RefObject<AnalyserNode | null>;
+  micAnalyserRef?: RefObject<AnalyserNode | null>;
+  cueBus?: CueBus;
+  audioClockMs?: () => number;
   muted: boolean;
   onToggleMute: () => void;
   onEndCall: () => void;
   messages: ChatMessage[];
   streaming: boolean;
+  waking?: boolean;
 }
 
-export default function LiveCallView({ agentName, analyserRef, muted, onToggleMute, onEndCall, messages, streaming }: Props) {
+export default function LiveCallView({
+  agentName, analyserRef, micAnalyserRef, cueBus, audioClockMs, muted,
+  onToggleMute, onEndCall, messages, streaming, waking,
+}: Props) {
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  // Some people find a watching face genuinely unpleasant. The switch persists.
+  const [faceOn, setFaceOn] = useState(() => {
+    try { return localStorage.getItem(FACE_PREF_KEY) !== 'off'; } catch { return true; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(FACE_PREF_KEY, faceOn ? 'on' : 'off'); } catch { /* private mode */ }
+  }, [faceOn]);
 
   useEffect(() => {
     const el = transcriptRef.current;
@@ -27,13 +49,39 @@ export default function LiveCallView({ agentName, analyserRef, muted, onToggleMu
     : undefined;
   const lastUser = [...messages].reverse().find((m) => m.role === 'user') as TextMessage | undefined;
 
+  const status = waking
+    ? 'Waking the voice…'
+    : muted ? 'Microphone muted' : 'Listening…';
+
   return (
     <div className={styles.container}>
       <div className={styles.agentName}>{agentName}</div>
 
       <div className={styles.visualizer}>
-        <AgentVisualizer analyserRef={analyserRef} streaming={streaming} size={160} />
+        {faceOn ? (
+          <AgentFace
+            analyserRef={analyserRef}
+            micAnalyserRef={micAnalyserRef}
+            cues={cueBus}
+            clockMs={audioClockMs}
+            streaming={streaming}
+            muted={muted}
+            waking={waking}
+            character={characterFor(agentName)}
+            size={200}
+          />
+        ) : (
+          <AgentVisualizer analyserRef={analyserRef} streaming={streaming} size={160} />
+        )}
       </div>
+
+      <button
+        className={styles.faceToggle}
+        onClick={() => setFaceOn((v) => !v)}
+        aria-pressed={faceOn}
+      >
+        {faceOn ? 'Hide face' : 'Show face'}
+      </button>
 
       <div className={styles.transcript} ref={transcriptRef}>
         {lastUser && (
@@ -50,8 +98,9 @@ export default function LiveCallView({ agentName, analyserRef, muted, onToggleMu
         )}
       </div>
 
-      <div className={styles.status}>
-        {muted ? 'Microphone muted' : 'Listening…'}
+      {/* Speaking state is never conveyed by the face alone. */}
+      <div className={styles.status} role="status" aria-live="polite">
+        {streaming ? `${agentName} is speaking…` : status}
       </div>
 
       <div className={styles.controls}>

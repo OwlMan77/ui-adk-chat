@@ -5,7 +5,18 @@ class PcmPlayerProcessor extends AudioWorkletProcessor {
     this.buffer = new Float32Array(this.bufferSize);
     this.writeIndex = 0;
     this.readIndex = 0;
-    this.port.onmessage = (e) => this._enqueue(e.data);
+    // Monotonic count of frames actually handed to the output. This is the
+    // audio clock: cues and word timings schedule against it, because the ring
+    // buffer means a chunk arrives well before it is heard.
+    this.framesPlayed = 0;
+    this.blocksSinceReport = 0;
+    this.port.onmessage = (e) => {
+      if (e.data && e.data.type === 'reset') {
+        this.readIndex = this.writeIndex;
+        return;
+      }
+      this._enqueue(e.data);
+    };
   }
 
   _enqueue(arrayBuffer) {
@@ -25,7 +36,15 @@ class PcmPlayerProcessor extends AudioWorkletProcessor {
       out[i] = this.buffer[this.readIndex];
       if (this.readIndex !== this.writeIndex) {
         this.readIndex = (this.readIndex + 1) % this.bufferSize;
+        this.framesPlayed++;
       }
+    }
+
+    // ~85 ms between reports at 24 kHz; the main thread interpolates between
+    // them, so this stays cheap without the clock going stale.
+    if (++this.blocksSinceReport >= 16) {
+      this.blocksSinceReport = 0;
+      this.port.postMessage({ type: 'progress', framesPlayed: this.framesPlayed });
     }
     return true;
   }
